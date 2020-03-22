@@ -1,0 +1,120 @@
+version: '3.7'
+services:
+  mysql:
+    container_name: mysql
+    image: mysql:5.7
+    restart: always
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: payment_gateway
+      MYSQL_USER: user
+      MYSQL_PASSWORD: example_password
+      MYSQL_ROOT_PASSWORD: example_root_password
+    ports:
+      - '3306:3306'
+    networks:
+      - default_network
+    volumes:
+      - ./mysql/data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100M"
+        max-file: "3"
+  redis:
+    container_name: redis
+    image: redis:5-alpine
+    restart: always
+    command: --maxmemory 100mb
+    environment:
+      - DISABLE_COMMANDS=FLUSHDB,FLUSHALL,CONFIG
+      - ALLOW_EMPTY_PASSWORD=yes
+    ports:
+      - '6379:6379'
+    networks:
+      - default_network
+    volumes:
+      - ./redis/data:/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100M"
+        max-file: "3"
+  mongodb:
+    container_name: mongodb
+    image: mongo:3.6
+    restart: always
+    environment:
+      MONGO_INITDB_DATABASE: example_db
+      MONGO_INITDB_ROOT_PASSWORD: example_password
+      MONGO_INITDB_ROOT_USERNAME: admin
+    ports:
+      - '27017:27017'
+    networks:
+      - default_network
+    volumes:
+        - ./mongodb/data:/data/db
+    logging:
+        driver: "json-file"
+        options:
+            max-size: "100M"
+            max-file: "3"
+  rabbitmq:
+    container_name: rabbitmq
+    image: rabbitmq:3-alpine
+    restart: always
+    environment:
+      - RABBITMQ_DEFAULT_USER=example_user
+      - RABBITMQ_DEFAULT_PASS=example_password
+    ports:
+      - '4369:4369'
+      - '5672:5672'
+      - '25672:25672'
+      - '15672:15672'
+    networks:
+      - default_network
+    volumes:
+      - ./rabbitmq/data:/bitnami
+      - $PWD/rabbitmq/data/log:/data/log
+      - $PWD/rabbitmq/data/mnesia:/data/mnesia
+      # - $PWD/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins
+    logging:
+        driver: "json-file"
+        options:
+            max-size: "100M"
+            max-file: "3"
+  traefik:
+    image: "traefik:v2.1"
+    container_name: "traefik"
+    command:
+      - "--log.level=INFO"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.http.address=:80"
+      - "--entrypoints.https.address=:443"
+      - "--certificatesresolvers.ssl.acme.httpchallenge=true"
+      - "--certificatesresolvers.ssl.acme.httpchallenge.entrypoint=http"
+      - "--certificatesresolvers.ssl.acme.email=user@domain.com"
+      - "--certificatesresolvers.ssl.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - traefik_network
+    labels:
+      - "traefik.enable=true"
+      # middleware redirect
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      # global redirect to https
+      - "traefik.http.routers.redirs.rule=hostregexp(`{host:.+}`)"
+      - "traefik.http.routers.redirs.entrypoints=http"
+      - "traefik.http.routers.redirs.middlewares=redirect-to-https"
+    volumes:
+      - "./letsencrypt:/letsencrypt"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+networks:
+    default_network:
+        external: true
+    traefik_network:
+        external: true
